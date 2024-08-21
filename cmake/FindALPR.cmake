@@ -1,0 +1,15 @@
+# Find ALPR
+
+find_path(ALPR_INCLUDE_DIR alpr.h)
+find_path(ALPRSTREAM_INCLUDE_DIR alprstream.h)
+
+find_library(ALPR_LIBRARY NAMES alpr openalpr)
+find_library(ALPRSTREAM_LIBRARY NAMES alprstream)
+
+include(FindPackageHandleStandardArgs)
+# find_package_handle_standard_args(ALPR DEFAULT_MSG ALPR_LIBRARY ALPR_INCLUDE_DIR)
+find_package_handle_standard_args(ALPR DEFAULT_MSG ALPR_LIBRARY ALPR_INCLUDE_DIR ALPRSTREAM_LIBRARY ALPRSTREAM_INCLUDE_DIR)  # Modify this line
+mark_as_advanced(ALPR_INCLUDE_DIR ALPR_LIBRARY ALPRSTREAM_INCLUDE_DIR ALPRSTREAM_LIBRARY)
+
+set(ALPR_LIBRARIES ${ALPR_LIBRARY} ${ALPRSTREAM_LIBRARY})
+set(ALPR_INCLUDE_DIRS ${ALPR_INCLUDE_DIR} ${ALPRSTREAM_INCLUDE_DIR})

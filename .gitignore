@@ -1,0 +1,17 @@
+# Compiled object files
+*.o
+*.obj
+
+# Compiled dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Build directory
+build/
+
+# Dependency directories
+dependencies/
+
+# IDE files
+.vscode/
