@@ -181,8 +181,8 @@ void test_batch_image_api(bool use_gpu, int batch_size) {
     std::cout << "Time taken by function: " << duration.count()/1e6 << " seconds" << std::endl;
 }
 
-
-void process_frames(alpr::Alpr* alpr, alpr::AlprStream* alpr_stream, std::vector<std::vector<alpr::AlprGroupResult>>& groups_results,
+void process_frames(std::unique_ptr<alpr::Alpr> alpr, alpr::AlprStream* alpr_stream, 
+                    std::vector<std::vector<alpr::AlprGroupResult>>& groups_results,
                     std::atomic<bool>& processing_done, std::mutex& results_mutex) {
 
     std::vector<std::vector<alpr::AlprGroupResult>> local_results;
@@ -192,7 +192,7 @@ void process_frames(alpr::Alpr* alpr, alpr::AlprStream* alpr_stream, std::vector
             continue;
         }
 
-        std::vector<alpr::RecognizedFrame> frame_result = alpr_stream->process_batch(alpr);
+        std::vector<alpr::RecognizedFrame> frame_result = alpr_stream->process_batch(alpr.get());
         
         local_results.emplace_back(alpr_stream->pop_completed_groups());
 
@@ -217,7 +217,6 @@ void test_stream_api_thread(bool use_gpu, int batch_size, int stream_queue_size)
     const int USE_MOTION_DETECTION = 1;
     alpr::AlprStream alpr_stream(stream_queue_size, USE_MOTION_DETECTION);
 
-    // std::string video_file_path = "../data/videos/720p.mp4";
     std::string video_file_path = "../data/videos/video_0.mp4";
     std::atomic<bool> video_connected(false);
     std::thread video_thread(video_input, &alpr_stream, video_file_path, std::ref(video_connected));
@@ -235,30 +234,31 @@ void test_stream_api_thread(bool use_gpu, int batch_size, int stream_queue_size)
     std::vector<std::thread> processing_threads;
     std::mutex results_mutex;
 
-    alpr::Alpr alpr(
-        "us",
-        "/mnt/data/config/openalpr.gpu.conf",
-        "/usr/share/openalpr/runtime_data", 
-        "/mnt/data/config/lpr_key.txt",
-        use_gpu ? alpr::AlprHardwareAcceleration::ALPR_NVIDIA_GPU : alpr::AlprHardwareAcceleration::ALPR_CPU,
-        0,
-        batch_size);
-
-    if (!alpr.isLoaded()) {
-        std::cerr << "Error loading OpenALPR" << std::endl;
-        return;
-    }
-    alpr.setTopN(5);
-    alpr.setDetectRegion(false);
-    alpr.setDetectVehicles(false, false);
-
-    // if (use_gpu) {
-    //     alpr_stream.set_gpu_async(1);
-    // }
+    auto create_alpr = [&]() {
+        return std::make_unique<alpr::Alpr>(
+            "us",
+            "/mnt/data/config/openalpr.gpu.conf",
+            "/usr/share/openalpr/runtime_data", 
+            "/mnt/data/config/lpr_key.txt",
+            use_gpu ? alpr::AlprHardwareAcceleration::ALPR_NVIDIA_GPU : alpr::AlprHardwareAcceleration::ALPR_CPU,
+            0,
+            batch_size);
+    };
 
     int num_threads = std::min(2, (int)std::thread::hardware_concurrency());
     for (int i = 0; i < num_threads; ++i) {
-        processing_threads.emplace_back(process_frames, &alpr, &alpr_stream, std::ref(groups_results), std::ref(processing_done), std::ref(results_mutex));
+        auto alpr = create_alpr();
+        if (!alpr->isLoaded()) {
+            std::cerr << "Error loading OpenALPR for thread " << i << std::endl;
+            return;
+        }
+        alpr->setTopN(5);
+        alpr->setDetectRegion(false);
+        alpr->setDetectVehicles(false, false);
+
+        processing_threads.emplace_back(process_frames, std::move(alpr), &alpr_stream, 
+                                        std::ref(groups_results), std::ref(processing_done), 
+                                        std::ref(results_mutex));
     }
 
     for (auto& thread : processing_threads) {
